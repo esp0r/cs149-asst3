@@ -1,3 +1,7 @@
 saxpy/cudaSaxpy
 **/objs/**
 **/compile_commands.json
+saxpy/setup.sh
+**/.cache/**
+saxpy/.clangd
+saxpy/setup.sh
