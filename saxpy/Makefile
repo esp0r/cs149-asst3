@@ -14,13 +14,11 @@ ARCH=$(shell uname | sed -e 's/-.*//g')
 OBJDIR=objs
 CXX=g++ -m64
 CXXFLAGS=-O3 -Wall
-ifeq ($(ARCH), Darwin)
-# Building on mac
-LDFLAGS=-L/usr/local/depot/cuda-8.0/lib/ -lcudart
-else
-# Building on Linux
-LDFLAGS=-L/usr/local/cuda/lib64/ -lcudart
-endif
+
+# Conditional assignment for CUDA_LIB_PATH
+CUDA_LIB_PATH ?= $(CUDA_HOME)/lib64
+LDFLAGS=-L$(CUDA_LIB_PATH) -lcudart
+
 NVCC=nvcc
 NVCCFLAGS=-O3 -m64
 

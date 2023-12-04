@@ -1,0 +1,3 @@
+saxpy/cudaSaxpy
+**/objs/**
+**/compile_commands.json
