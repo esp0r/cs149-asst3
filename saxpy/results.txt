@@ -1,0 +1,46 @@
+---------------------------------------------------------
+Found 1 CUDA devices
+Device 0: NVIDIA A100-SXM4-40GB
+   SMs:        108
+   Global mem: 40370 MB
+   CUDA Cap:   8.0
+---------------------------------------------------------
+Pageable Memory
+Running 3 timing tests:
+Effective BW by CUDA saxpy: 126.152 ms          [8.859 GB/s]
+Kernel Duration: 0.913 ms
+Effective BW by CUDA saxpy: 154.282 ms          [7.244 GB/s]
+Kernel Duration: 0.908 ms
+Effective BW by CUDA saxpy: 150.872 ms          [7.408 GB/s]
+Kernel Duration: 0.910 ms
+
+Pinned Memory
+Running 3 timing tests:
+Effective BW by CUDA saxpy: 49.467 ms           [22.592 GB/s]
+Kernel Duration: 0.904 ms
+Effective BW by CUDA saxpy: 79.735 ms           [14.016 GB/s]
+Kernel Duration: 0.918 ms
+Effective BW by CUDA saxpy: 77.886 ms           [14.349 GB/s]
+Kernel Duration: 0.893 ms
+
+BandWidth Test:
+[CUDA Bandwidth Test] - Starting...
+Running on...
+
+ Device 0: NVIDIA A100-SXM4-40GB
+ Quick Mode
+
+ Host to Device Bandwidth, 1 Device(s)
+ PINNED Memory Transfers
+   Transfer Size (Bytes)        Bandwidth(GB/s)
+   32000000                     25.6
+
+ Device to Host Bandwidth, 1 Device(s)
+ PINNED Memory Transfers
+   Transfer Size (Bytes)        Bandwidth(GB/s)
+   32000000                     25.8
+
+ Device to Device Bandwidth, 1 Device(s)
+ PINNED Memory Transfers
+   Transfer Size (Bytes)        Bandwidth(GB/s)
+   32000000                     1160.0

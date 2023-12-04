@@ -20,7 +20,7 @@ CUDA_LIB_PATH ?= $(CUDA_HOME)/lib64
 LDFLAGS=-L$(CUDA_LIB_PATH) -lcudart
 
 NVCC=nvcc
-NVCCFLAGS=-O3 -m64
+NVCCFLAGS=-O3 -m64 -arch=sm_80
 
 
 OBJS=$(OBJDIR)/main.o  $(OBJDIR)/saxpy.o
