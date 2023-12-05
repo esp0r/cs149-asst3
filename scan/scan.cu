@@ -198,6 +198,26 @@ double cudaScanThrust(int* inarray, int* end, int* resultarray) {
     return overallDuration; 
 }
 
+__global__
+void find_repeats_kernel(int* input, int length, int* output) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index < length - 1) {
+        if (input[index] == input[index + 1]) {
+            output[index] = 1;
+        } else {
+            output[index] = 0;
+        }
+    }
+}
+__global__
+void get_output_kernel(int* input, int length, int* output) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index < length - 1) {
+        if (input[index] != input[index + 1]) {
+            output[input[index]] = index;
+        }
+    }
+}
 
 // find_repeats --
 //
@@ -219,7 +239,19 @@ int find_repeats(int* device_input, int length, int* device_output) {
     // must ensure that the results of find_repeats are correct given
     // the actual array length.
 
-    return 0; 
+    // 1,2,2,1,1,1,3,5,3,3
+    // 0,1,0,1,1,0,0,0,1,0
+    // 0,0,1,1,2,3,3,3,3,4
+    int BLOCKS = (length + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    find_repeats_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(device_input, length, device_output);
+    cudaCheckError(cudaDeviceSynchronize());
+    exclusive_scan(device_output, length, device_input);
+    cudaCheckError(cudaDeviceSynchronize());
+    get_output_kernel<<<BLOCKS, THREADS_PER_BLOCK>>>(device_input, length, device_output);
+    cudaCheckError(cudaDeviceSynchronize());
+    int result;
+    cudaMemcpy(&result, device_input + length - 1, sizeof(int), cudaMemcpyDeviceToHost);
+    return result;
 }
 
 
