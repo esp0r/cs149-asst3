@@ -5,3 +5,6 @@ saxpy/setup.sh
 **/.cache/**
 saxpy/.clangd
 saxpy/setup.sh
+scan/cudaScan
+**/.vscode/**
+scan/logs/**

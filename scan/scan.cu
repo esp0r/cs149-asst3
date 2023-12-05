@@ -12,6 +12,23 @@
 
 #include "CycleTimer.h"
 
+#define DEBUG
+
+#ifdef DEBUG
+#define cudaCheckError(ans) { cudaAssert((ans), __FILE__, __LINE__); }
+inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess) 
+   {
+      fprintf(stderr, "CUDA Error: %s at %s:%d\n", 
+        cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+#else
+#define cudaCheckError(ans) ans
+#endif
+
 #define THREADS_PER_BLOCK 256
 
 
@@ -26,6 +43,30 @@ static inline int nextPow2(int n) {
     n++;
     return n;
 }
+
+__global__ void
+exclusive_scan_upsweep(int* input, int N, int two_d, int* result)
+{
+    int two_dplus1 = two_d << 1;
+    long int index = (blockIdx.x * blockDim.x + threadIdx.x) * two_dplus1;
+    if (index < N) {
+        result[index + two_dplus1 - 1] += result[index + two_d - 1];
+    }
+}
+
+__global__ void
+exclusive_scan_downsweep(int* input, int N, int two_d, int* result)
+{
+    int two_dplus1 = two_d << 1;
+    long int index = (blockIdx.x * blockDim.x + threadIdx.x) * two_dplus1;
+    if (index < N) {
+        int temp = result[index + two_d - 1];
+        result[index + two_d - 1] = result[index + two_dplus1 - 1];
+        result[index + two_dplus1 - 1] += temp;
+    }
+}
+__global__
+void set_last (int N, int* result) { result[N - 1] = 0; };
 
 // exclusive_scan --
 //
@@ -53,8 +94,25 @@ void exclusive_scan(int* input, int N, int* result)
     // on the CPU.  Your implementation will need to make multiple calls
     // to CUDA kernel functions (that you must write) to implement the
     // scan.
+    N = nextPow2(N);
 
+    cudaMemcpy(result, input, N * sizeof(int), cudaMemcpyDeviceToDevice);
 
+    for (int two_d = 1; two_d < N/2; two_d *= 2) {
+        int iterations = (N + two_d * 2 - 1) / (two_d * 2);
+        int BLOCKS = (iterations + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+        exclusive_scan_upsweep<<<BLOCKS, THREADS_PER_BLOCK>>>(input, N, two_d, result);
+        cudaCheckError(cudaDeviceSynchronize());
+    }
+
+    set_last<<<1, 1>>>(N, result);
+
+    for (int two_d = N/2; two_d >= 1; two_d /= 2) {
+        int iterations = (N + two_d * 2 - 1) / (two_d * 2);
+        int BLOCKS = (iterations + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+        exclusive_scan_downsweep<<<BLOCKS, THREADS_PER_BLOCK>>>(input, N, two_d, result);
+        cudaCheckError(cudaDeviceSynchronize());
+    }
 }
 
 
