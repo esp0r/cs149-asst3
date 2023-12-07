@@ -8,3 +8,8 @@ saxpy/setup.sh
 scan/cudaScan
 **/.vscode/**
 scan/logs/**
+.gitattribute
+cs149_asset3.stf
+render/render
+.gitignore
+render/output_0000.ppm
