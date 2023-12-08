@@ -14,6 +14,18 @@
 #include "sceneLoader.h"
 #include "util.h"
 
+
+// Three conditions must hold
+// 1. BLOCK_SIZE is a power of 2
+// 2. BLOCK_SIZE <= 1024
+// 3. TILE_SIZE^2 = BLOCK_SIZE
+#define TILE_SIZE 32
+#define BLOCK_SIZE 1024
+#define SCAN_BLOCK_DIM BLOCK_SIZE
+
+#define upDiv(x, y) (((x) + (y) - 1) / (y))
+
+
 ////////////////////////////////////////////////////////////////////////////////////////
 // Putting all the cuda kernels here
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -55,6 +67,8 @@ __constant__ float  cuConstColorRamp[COLOR_MAP_SIZE][3];
 // file simpler and to seperate code that should not be modified
 #include "noiseCuda.cu_inl"
 #include "lookupColor.cu_inl"
+#include "circleBoxTest.cu_inl"
+#include "exclusiveScan.cu_inl"
 
 
 // kernelClearImageSnowflake -- (CUDA device code)
@@ -427,6 +441,97 @@ __global__ void kernelRenderCircles() {
     }
 }
 
+// https://githubfast.com/Rjuhl/asst3.git
+__global__ void kernelRender() {
+    // 0 1 2 3 4 5 6 7
+    // 0 0 1 0 1 1 0 1
+    // 0 0 0 1 1 2 3 3
+    // 2 4 5 7
+    // Init shared arrays (shared arrays are accessible by every thread in a block)
+    __shared__ uint possiableCircles[BLOCK_SIZE];
+    __shared__ uint circleOneHot[BLOCK_SIZE]; 
+    __shared__ uint indexes[BLOCK_SIZE];
+    __shared__ uint scratch[2 * BLOCK_SIZE];
+
+    // Init constants 
+    const short imageWidth = cuConstRendererParams.imageWidth;
+    const short imageHeight = cuConstRendererParams.imageHeight;
+    const float invWidth = 1.f / imageWidth;
+    const float invHeight = 1.f / imageHeight;
+
+    uint px = blockIdx.x * TILE_SIZE + (threadIdx.x % TILE_SIZE);
+    uint py = blockIdx.y * TILE_SIZE + (threadIdx.x / TILE_SIZE);
+
+    float bottom = blockIdx.y * TILE_SIZE;
+    float top = bottom + TILE_SIZE;
+    float left = blockIdx.x * TILE_SIZE;
+    float right = left + TILE_SIZE;
+
+    // This is what is passed into exclusiveScan and indexes in input/output in the shared memmory
+    uint sharedLinearIndex = threadIdx.x;
+
+    // For each circle chunk 
+    for (int circleStart = 0; circleStart < cuConstRendererParams.numCircles; circleStart += (BLOCK_SIZE - 1)) { 
+        int circleIndex = circleStart + sharedLinearIndex;
+
+        // Compute one hots
+        float3 p = *(float3*)(&cuConstRendererParams.position[circleIndex * 3]);
+        circleOneHot[sharedLinearIndex] = circleInBoxConservative(
+            p.x, p.y, cuConstRendererParams.radius[circleIndex],
+            invWidth * (static_cast<float>(left) + 0.5f), 
+            invWidth * (static_cast<float>(right) - 0.5f), 
+            invHeight * (static_cast<float>(top) - 0.5f), 
+            invHeight * (static_cast<float>(bottom) + 0.5f)
+        );
+        __syncthreads(); 
+
+        // Compute scan
+        sharedMemExclusiveScan(sharedLinearIndex, circleOneHot, indexes, scratch, BLOCK_SIZE);
+        __syncthreads();
+
+        // Update circles we might need to render
+        if (circleOneHot[sharedLinearIndex]) {
+            possiableCircles[indexes[sharedLinearIndex]] = circleIndex; 
+        }
+        __syncthreads();
+
+        // Update sizes
+        int possiableCirclesCount = circleOneHot[BLOCK_SIZE - 1] == 0 ? indexes[BLOCK_SIZE - 1] : indexes[BLOCK_SIZE - 1] + 1;
+
+        // color tile
+        // If there pixel is in bounds color it 
+        if (px < imageWidth && py < imageHeight){
+            
+            // Get pixel position and img placement details
+            float2 pixelCenterNorm = make_float2(
+                invWidth * (static_cast<float>(px) + 0.5f),
+                invHeight * (static_cast<float>(py) + 0.5f)
+            );
+
+            float4* imgPtr = (float4*)(&cuConstRendererParams.imageData[4 * (py * imageWidth + px)]);
+
+            // Iterate through possiable circles to color pixel 
+            for (int i = 0; i < possiableCirclesCount; i++) {
+                int possiableCircleIndex = possiableCircles[i];
+                float3 cp = *(float3*)(&cuConstRendererParams.position[possiableCircleIndex * 3]);
+
+                // Check if the circle intersect the specific pixel
+                if (circleInBox(
+                    cp.x, cp.y,
+                    cuConstRendererParams.radius[possiableCircleIndex],
+                    invWidth * (static_cast<float>(px) - 0.5f), 
+                    invWidth * (static_cast<float>(px) + 0.5f), 
+                    invHeight * (static_cast<float>(py) + 0.5f), 
+                    invHeight * (static_cast<float>(py) - 0.5f)
+                )) {
+                    // Shade pixel with circle 
+                    shadePixel(possiableCircleIndex, pixelCenterNorm, cp, imgPtr);
+                }
+            }
+        }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -635,11 +740,7 @@ CudaRenderer::advanceAnimation() {
 
 void
 CudaRenderer::render() {
-
-    // 256 threads per block is a healthy number
-    dim3 blockDim(256, 1);
-    dim3 gridDim((numCircles + blockDim.x - 1) / blockDim.x);
-
-    kernelRenderCircles<<<gridDim, blockDim>>>();
-    cudaDeviceSynchronize();
+    dim3 BLOCK_DIM(BLOCK_SIZE, 1);
+    dim3 GRID_DIM(upDiv(image->width, TILE_SIZE), upDiv(image->height, TILE_SIZE));
+    kernelRender<<<GRID_DIM, BLOCK_DIM>>>();
 }

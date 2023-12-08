@@ -12,4 +12,7 @@ scan/logs/**
 cs149_asset3.stf
 render/render
 .gitignore
-render/output_0000.ppm
+render/*output*
+*DS_Store
+render/logs/**
+render/._render_ref
